@@ -47,6 +47,7 @@ local RaidIconIndex = {
 
 NP.CreatedPlates = {}
 NP.VisiblePlates = {}
+NP.PlatesByUnit = {}
 NP.Healers = {}
 
 NP.NameByUnit = {}
@@ -310,15 +311,23 @@ function NP:GetUnitTypeFromUnit(unit)
 	end
 end
 
+local function GetPlateUnit(plate)
+	if plate.GetUnit then return plate:GetUnit() end
+	return plate.unitToken or plate.namePlateUnitToken
+end
+
 function NP:OnShow(isConfig, dontHideHighlight, unitToken)
 	local frame = self.ElvUIFrame
 	if not frame then return end
 
 	NP:DisableBlizzard(self)
 
-	local unit = unitToken or self.namePlateUnitToken
+	local unit = unitToken or GetPlateUnit(self)
+	if not unit and not frame.testUnitType then return end
+
 	frame.unit = unit
 	frame.guid = unit and UnitGUID(unit)
+	if unit then NP.PlatesByUnit[unit] = self end
 
 	NP.VisiblePlates[frame] = 1
 
@@ -384,6 +393,9 @@ function NP:OnHide(isConfig)
 
 	NP.VisiblePlates[frame] = nil
 
+	if frame.unit and NP.PlatesByUnit[frame.unit] == self then
+		NP.PlatesByUnit[frame.unit] = nil
+	end
 	frame.unit = nil
 
 	for i = 1, #frame.Buffs do
@@ -564,7 +576,7 @@ function NP:UpdateClickableSizes()
 	end
 end
 
-local blizzardRegions = { "healthBar", "castBar", "BuffFrame", "ClassificationFrame", "RaidTargetFrame", "aggroHighlight", "selectionHighlight", "classificationIndicator", "name" }
+local blizzardRegions = { "healthBar", "castBar", "BuffFrame", "AurasFrame", "LevelFrame", "ClassificationFrame", "RaidTargetFrame", "aggroHighlight", "aggroHighlightBase", "aggroHighlightAdditive", "aggroFlash", "selectionHighlight", "classificationIndicator", "behindCameraIcon", "name" }
 
 local function muteBlizzardPlate(blizz)
 	blizz:SetAlpha(0)
@@ -600,14 +612,13 @@ end
 
 local function neutralizeDriverPlate(plate)
 	local blizz = plate.UnitFrame
-	if not blizz then return end
+	if not (blizz and blizz.isNamePlate) then return end
 
-	if CompactUnitFrame_UnregisterEvents then
-		CompactUnitFrame_UnregisterEvents(blizz)
-	end
+	NP:DisableBlizzard(plate)
 
-	if blizz.BuffFrame and blizz.BuffFrame.SetActive then
-		blizz.BuffFrame:SetActive(false)
+	local auras = blizz.AurasFrame or blizz.BuffFrame
+	if auras and auras.SetActive then
+		auras:SetActive(false)
 	end
 end
 
@@ -686,33 +697,24 @@ function NP:OnEvent(event, unit, ...)
 	NP:Update_CastBar(self, event, unit, ...)
 end
 
-local function registerUnitEvent(frame, event)
-	frame:RegisterUnitEvent(event, frame.unit)
-end
+local unitEvents = {
+	"UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTION", "UNIT_AURA"
+}
+local castEvents = {
+	"UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_START",
+	"UNIT_SPELLCAST_CHANNEL_UPDATE", "UNIT_SPELLCAST_CHANNEL_STOP", "UNIT_SPELLCAST_INTERRUPTIBLE",
+	"UNIT_SPELLCAST_NOT_INTERRUPTIBLE", "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED"
+}
 
 function NP:RegisterEvents(frame)
 	if not frame.unit then return end
 
-	registerUnitEvent(frame, "UNIT_HEALTH")
-	registerUnitEvent(frame, "UNIT_MAXHEALTH")
-	registerUnitEvent(frame, "UNIT_NAME_UPDATE")
-	registerUnitEvent(frame, "UNIT_LEVEL")
-	registerUnitEvent(frame, "UNIT_FACTION")
-	registerUnitEvent(frame, "UNIT_AURA")
+	FrameUtil.RegisterFrameForUnitEvents(frame, unitEvents, frame.unit)
 	frame.isEventsRegistered = true
 
 	if NP.db.units[frame.UnitType].health.enable or (frame.isTarget and NP.db.alwaysShowTargetHealth) then
 		if NP.db.units[frame.UnitType].castbar.enable then
-			registerUnitEvent(frame, "UNIT_SPELLCAST_INTERRUPTED")
-			registerUnitEvent(frame, "UNIT_SPELLCAST_DELAYED")
-			registerUnitEvent(frame, "UNIT_SPELLCAST_CHANNEL_START")
-			registerUnitEvent(frame, "UNIT_SPELLCAST_CHANNEL_UPDATE")
-			registerUnitEvent(frame, "UNIT_SPELLCAST_CHANNEL_STOP")
-			registerUnitEvent(frame, "UNIT_SPELLCAST_INTERRUPTIBLE")
-			registerUnitEvent(frame, "UNIT_SPELLCAST_NOT_INTERRUPTIBLE")
-			registerUnitEvent(frame, "UNIT_SPELLCAST_START")
-			registerUnitEvent(frame, "UNIT_SPELLCAST_STOP")
-			registerUnitEvent(frame, "UNIT_SPELLCAST_FAILED")
+			FrameUtil.RegisterFrameForUnitEvents(frame, castEvents, frame.unit)
 		end
 
 		NP.OnEvent(frame, nil, frame.unit)
@@ -720,22 +722,8 @@ function NP:RegisterEvents(frame)
 end
 
 function NP:UnregisterFrameEvents(frame)
-	frame:UnregisterEvent("UNIT_HEALTH")
-	frame:UnregisterEvent("UNIT_MAXHEALTH")
-	frame:UnregisterEvent("UNIT_NAME_UPDATE")
-	frame:UnregisterEvent("UNIT_LEVEL")
-	frame:UnregisterEvent("UNIT_FACTION")
-	frame:UnregisterEvent("UNIT_AURA")
-	frame:UnregisterEvent("UNIT_SPELLCAST_INTERRUPTED")
-	frame:UnregisterEvent("UNIT_SPELLCAST_DELAYED")
-	frame:UnregisterEvent("UNIT_SPELLCAST_CHANNEL_START")
-	frame:UnregisterEvent("UNIT_SPELLCAST_CHANNEL_UPDATE")
-	frame:UnregisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
-	frame:UnregisterEvent("UNIT_SPELLCAST_INTERRUPTIBLE")
-	frame:UnregisterEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE")
-	frame:UnregisterEvent("UNIT_SPELLCAST_START")
-	frame:UnregisterEvent("UNIT_SPELLCAST_STOP")
-	frame:UnregisterEvent("UNIT_SPELLCAST_FAILED")
+	FrameUtil.UnregisterFrameForEvents(frame, unitEvents)
+	FrameUtil.UnregisterFrameForEvents(frame, castEvents)
 	frame.isEventsRegistered = nil
 end
 
@@ -1010,7 +998,7 @@ end
 
 function NP:AcquireExistingPlates()
 	for _, plate in ipairs(C_NamePlate_GetNamePlates()) do
-		local unit = plate.namePlateUnitToken
+		local unit = GetPlateUnit(plate)
 		if unit and UnitExists(unit) then
 			NP:NAME_PLATE_UNIT_ADDED(nil, unit)
 		end
@@ -1041,8 +1029,8 @@ end
 function NP:NAME_PLATE_UNIT_REMOVED(_, unit)
 	if not unit then return end
 
-	local plate = C_NamePlate_GetNamePlateForUnit(unit)
-	if plate and NP.CreatedPlates[plate] then
+	local plate = NP.PlatesByUnit[unit] or C_NamePlate_GetNamePlateForUnit(unit)
+	if plate and NP.CreatedPlates[plate] and plate.ElvUIFrame.unit == unit then
 		NP.OnHide(plate)
 	end
 end
