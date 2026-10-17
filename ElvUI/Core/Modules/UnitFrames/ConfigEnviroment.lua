@@ -293,11 +293,19 @@ do
 
 		if not length or (index % length) > 0 then
 			UF:ForceShow(frame)
+		else
+			frame:Hide() -- explicitly hide the skipped (player) slot so it never leaves a visual artifact
 		end
 	end
 
 	function UF:ShowChildUnits(header)
 		header.isForced = true
+
+		-- Keep the native showPlayer attribute in sync while in forced/test mode,
+		-- so the header layout matches real gameplay (fixes the empty slot on WotLK/Sirus)
+		if header.db and allowHidePlayer[header.groupName] then
+			header:SetAttribute("showPlayer", header.db.showPlayer ~= false)
+		end
 
 		local length -- Limit number of players shown, if Display Player option is disabled
 		if not UF.isForcedHidePlayer and not header.db.showPlayer and allowHidePlayer[header.groupName] then
@@ -306,6 +314,22 @@ do
 		end
 
 		header:ExecuteForChildren(nil, ForceShow, length)
+
+		-- Hard-hide children that were intentionally not force-shown (e.g. the player slot
+		-- when "Display Player" is off). On WotLK the SecureGroupHeader can resurrect them
+		-- inside the forced block, rendering a "bugged" real player frame among test frames.
+		if length then
+			local i = 1
+			local child = header:GetAttribute("child" .. i)
+			while child do
+				if not child.isForced then
+					child:SetAttribute("statehidden", true)
+					child:Hide()
+				end
+				i = i + 1
+				child = header:GetAttribute("child" .. i)
+			end
+		end
 	end
 
 	local function UnforceShow(frame)
