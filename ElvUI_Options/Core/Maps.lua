@@ -7,6 +7,7 @@ local ACH = E.Libs.ACH
 
 local _G = _G
 local pairs = pairs
+local GetSpellInfo = GetSpellInfo
 
 local buttonPositions = {
 	LEFT = L["Left"],
@@ -146,3 +147,38 @@ Maps.args.minimap.args.buttonGrabber.args.insideMinimap.args.enable = ACH:Toggle
 Maps.args.minimap.args.buttonGrabber.args.insideMinimap.args.position = ACH:Select(L["Position"], nil, 2, buttonPositions, nil, nil, nil, nil, function() return not E.private.general.minimapButtonGrabber.enable or not E.db.general.minimapButtonGrabber.insideMinimap.enable end)
 Maps.args.minimap.args.buttonGrabber.args.insideMinimap.args.xOffset = ACH:Range(L["X-Offset"], nil, 3, buttonOffsets, nil, nil, nil, function() return not E.private.general.minimapButtonGrabber.enable or not E.db.general.minimapButtonGrabber.insideMinimap.enable end)
 Maps.args.minimap.args.buttonGrabber.args.insideMinimap.args.yOffset = ACH:Range(L["Y-Offset"], nil, 4, buttonOffsets, nil, nil, nil, function() return not E.private.general.minimapButtonGrabber.enable or not E.db.general.minimapButtonGrabber.insideMinimap.enable end)
+
+local RB = E:GetModule('ReminderBuffs')
+local function ReminderGet(info) return E.db.general.reminder[info[#info]] end
+local function ReminderSet(info, value) E.db.general.reminder[info[#info]] = value RB:UpdateSettings() end
+local function ReminderOff() return not E.db.general.reminder.enable end
+local function ReminderSpellName(casterSpell, meleeSpell) return function() return (GetSpellInfo(RB:IsCaster() and casterSpell or meleeSpell)) end end
+
+Maps.args.minimap.args.reminder = ACH:Group(L["Reminder Buffs"], nil, 55, nil, ReminderGet, ReminderSet, function() return not E.private.general.minimap.enable end)
+local Reminder = Maps.args.minimap.args.reminder.args
+
+Reminder.enable = ACH:Toggle(L["Enable"], L["Display reminder bar on the minimap."], 1)
+
+Reminder.generalGroup = ACH:Group(L["General"], nil, 2, nil, nil, nil, ReminderOff)
+Reminder.generalGroup.inline = true
+Reminder.generalGroup.args.durations = ACH:Toggle(L["Remaining Time"], nil, 1)
+Reminder.generalGroup.args.reverse = ACH:Toggle(L["Reverse Style"], L["When enabled active buff icons will light up instead of becoming darker, while inactive buff icons will become darker instead of being lit up."], 2)
+Reminder.generalGroup.args.position = ACH:Select(L["Position"], nil, 3, { LEFT = L["Left"], RIGHT = L["Right"] }, nil, nil, nil, function(info, value) E.db.general.reminder[info[#info]] = value RB:UpdatePosition() end)
+Reminder.generalGroup.args.keepButtonSizeRatio = ACH:Toggle(L["Keep Size Ratio"], L["Square buttons, the height follows the minimap."], 4)
+Reminder.generalGroup.args.height = ACH:Range(L["Width"], L["Button width, the height follows the minimap."], 5, { min = 8, max = 64, step = 1 }, nil, nil, nil, function() return E.db.general.reminder.keepButtonSizeRatio end)
+
+Reminder.fontGroup = ACH:Group(L["Font"], nil, 3, nil, nil, nil, function() return not E.db.general.reminder.enable or not E.db.general.reminder.durations end)
+Reminder.fontGroup.inline = true
+Reminder.fontGroup.args.font = ACH:SharedMediaFont(L["Font"], nil, 1)
+Reminder.fontGroup.args.fontSize = ACH:Range(L["Font Size"], nil, 2, { min = 6, max = 22, step = 1 })
+Reminder.fontGroup.args.fontOutline = ACH:FontFlags(L["Font Outline"], L["Set the font outline."], 3)
+
+Reminder.checkgroup = ACH:Group(L["Buffs"], nil, 4, nil, nil, nil, ReminderOff)
+Reminder.checkgroup.inline = true
+Reminder.checkgroup.args.pot = ACH:Toggle(L["Flasks and Elixirs"], nil, 1)
+Reminder.checkgroup.args.food = ACH:Toggle(L["Food"], nil, 2)
+Reminder.checkgroup.args.drubuff = ACH:Toggle(GetSpellInfo(48469), nil, 3)
+Reminder.checkgroup.args.palcask = ACH:Toggle(GetSpellInfo(20217), nil, 4)
+Reminder.checkgroup.args.inta = ACH:Toggle(ReminderSpellName(42995, 48161), nil, 5)
+Reminder.checkgroup.args.palmp5 = ACH:Toggle(ReminderSpellName(48936, 48932), nil, 6)
+Reminder.checkgroup.args.oil = ACH:Toggle(ReminderSpellName(317727, 317728), nil, 7)

@@ -50,6 +50,19 @@ local function SkinIconHolder(holder, icon)
 	icon:SetTexCoords()
 end
 
+local function SkinTalentHeader(panel, header)
+	local shade = panel.headerShade
+	if not shade then
+		shade = panel:CreateTexture(nil, "ARTWORK", nil, 1)
+		shade:SetTexture(0, 0, 0, 0.65)
+		panel.headerShade = shade
+	end
+	shade:ClearAllPoints()
+	shade:Point("TOPLEFT", panel.backdrop, "TOPLEFT", 1, -1)
+	shade:Point("TOPRIGHT", panel.backdrop, "TOPRIGHT", -1, -1)
+	shade:SetHeight(header:GetHeight())
+end
+
 local function LayoutTreeArt(top, bottom, background, boxW, boxH)
 	if not (background and boxW and boxH and boxH > 0) then
 		top:Hide()
@@ -312,6 +325,8 @@ local function LoadSkin()
 		headerIcon:Size(E.PixelMode and 34 or 30)
 		headerIcon:Point("TOPLEFT", E.PixelMode and 1 or 4, -(E.PixelMode and 1 or 4))
 
+		SkinTalentHeader(panel, header)
+
 		headerText:FontTemplate(nil, 13, "OUTLINE")
 		headerText:Point("BOTTOMRIGHT", header, "BOTTOMRIGHT", 125, 11)
 
@@ -365,8 +380,7 @@ local function LoadSkin()
 		button:GetPushedTexture():SetTexCoords()
 		button:SetNormalTexture("")
 
-		button.icon:SetTexCoords()
-		button.icon:SetAllPoints()
+		S:StyleTalentIcon(button, button.icon)
 
 		button.Rank:FontTemplate()
 	end
@@ -479,13 +493,14 @@ local function LoadSkin()
 	local petPoints = select(4, PlayerTalentFramePetPanelHeaderIcon:GetRegions())
 	petPoints:FontTemplate(nil, 13, "OUTLINE")
 	petPoints:ClearAllPoints()
-	petPoints:Point("BOTTOMRIGHT", PlayerTalentFramePetPanelHeaderIcon, "BOTTOMRIGHT", 150, 15)
+	petPoints:Point("BOTTOMRIGHT", PlayerTalentFramePetPanelHeaderIcon.backdrop, "BOTTOMRIGHT", -2, -2)
 
 	PlayerTalentFramePetPanelArrow:SetFrameStrata("HIGH")
 
 	PlayerTalentFramePetPanel:CreateBackdrop("Transparent")
 	PlayerTalentFramePetPanel.backdrop:Point("TOPLEFT", 4, -4)
 	PlayerTalentFramePetPanel.backdrop:Point("BOTTOMRIGHT", -4, 4)
+	SkinTalentHeader(PlayerTalentFramePetPanel, PlayerTalentFramePetPanelHeaderIcon)
 
 	PlayerTalentFramePetPanel:HookScript("OnShow", function()
 		for i = 1, GetNumTalents(1, false, true) do
@@ -512,8 +527,7 @@ local function LoadSkin()
 
 					button:GetNormalTexture():SetTexCoords()
 				end
-				icon:SetTexCoords()
-				icon:SetAllPoints()
+				S:StyleTalentIcon(button, icon)
 
 				if button.Rank then
 					button.Rank:FontTemplate(nil, 12, "OUTLINE")

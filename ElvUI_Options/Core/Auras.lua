@@ -90,9 +90,10 @@ do
 	local consolidateDisabled = function() return GetCVar('consolidateBuffs') ~= '1' end
 	local consolidateGroup = ACH:Group(L["Consolidate Buffs"], nil, -4)
 	consolidateGroup.args.description = ACH:Description(L["Buff consolidation is toggled by the 'Consolidate Buffs' checkbox in the game's Interface options."], 1)
-	consolidateGroup.args.consolidateMax = ACH:Range(L["Max Consolidated"], L["Maximum amount of consolidated buffs shown in the popup."], 2, { min = 4, max = 32, step = 1 }, nil, nil, nil, consolidateDisabled)
-	consolidateGroup.args.consolidateDirection = ACH:Select(L["Consolidate Direction"], L["The direction the consolidated buffs will grow."], 3, C.Values.GrowthDirection, nil, nil, nil, nil, consolidateDisabled)
-	consolidateGroup.args.consolidateSize = ACH:Range(L["Consolidate Size"], L["Set the size of the icons in the consolidated buffs popup."], 4, { min = 12, max = 64, step = 1 }, nil, nil, nil, consolidateDisabled)
+	consolidateGroup.args.spacer1 = ACH:Spacer(1.5, 'full')
+	consolidateGroup.args.consolidateMax = ACH:Range(L["Max Consolidated"], L["Maximum amount of consolidated buffs shown in the popup."], 2, { min = 4, max = 32, step = 1 }, 1.3, nil, nil, consolidateDisabled)
+	consolidateGroup.args.consolidateDirection = ACH:Select(L["Consolidate Direction"], L["The direction the consolidated buffs will grow."], 3, C.Values.GrowthDirection, nil, 1.3, nil, nil, consolidateDisabled)
+	consolidateGroup.args.consolidateSize = ACH:Range(L["Consolidate Size"], L["Set the size of the icons in the consolidated buffs popup."], 4, { min = 12, max = 64, step = 1 }, 1.3, nil, nil, consolidateDisabled)
 
 	Auras.args.buffs.args.consolidateGroup = consolidateGroup
 end
@@ -116,12 +117,20 @@ Auras.args.debuffs.args.statusBar.args.barColor.disabled = function() return not
 local carryFilterFrom, carryFilterTo
 
 local function filterPriority(auraType, value, remove, movehere)
-	C.SetFilterPriority(E.db, 'auras', auraType, value, remove, movehere, nil, false)
+	local db = E.db.auras[auraType]
+	local filter = E.global.unitframe.aurafilters[value]
+	if not remove and not movehere and filter and filter.type == 'Blacklist'
+		and not C.FilterMatch(db.priority, E:EscapeString(value)) then
+		db.priority = db.priority == '' and value or (value..','..db.priority)
+	else
+		C.SetFilterPriority(E.db, 'auras', auraType, value, remove, movehere, nil, false)
+	end
 end
 
 local function UpdateAuraFrames()
 	if A.BuffFrame then A:UpdateAllAuras(A.BuffFrame) end
 	if A.DebuffFrame then A:UpdateAllAuras(A.DebuffFrame) end
+	E.Libs.AceConfigRegistry:NotifyChange('ElvUI')
 end
 
 local function GetFilterGroup(auraType)
@@ -143,6 +152,7 @@ local function GetFilterGroup(auraType)
 				type = 'select',
 				sortByValue = true,
 				name = L["Add Special Filter"],
+				get = E.noop,
 				desc = L["These filters don't use a list of spells like the regular filters. Instead they use the WoW API and some code logic to determine if an aura should be allowed or blocked."],
 				values = function()
 					local filters = {}
@@ -162,6 +172,7 @@ local function GetFilterGroup(auraType)
 				order = 3,
 				type = 'select',
 				name = L["Add Regular Filter"],
+				get = E.noop,
 				desc = L["These filters use a list of spells to determine if an aura should be allowed or blocked. The content of these filters can be modified in the 'Filters' section of the config."],
 				values = function()
 					local filters = {}
@@ -233,6 +244,17 @@ end
 
 Auras.args.buffs.args.filtersGroup = GetFilterGroup('buffs')
 Auras.args.debuffs.args.filtersGroup = GetFilterGroup('debuffs')
+
+for _, group in next, { Auras.args.buffs, Auras.args.debuffs } do
+	local general = ACH:Group(L["General"], nil, 1)
+	for key, option in next, group.args do
+		if option.type ~= 'group' or option.guiInline then
+			general.args[key] = option
+			group.args[key] = nil
+		end
+	end
+	group.args.general = general
+end
 
 Auras.args.masqueGroup = ACH:Group(L["Masque"], nil, 13, nil, nil, nil, function() return not E.Masque or not E.private.auras.enable end)
 Auras.args.masqueGroup.args.masque = ACH:MultiSelect(L["Masque Support"], L["Allow Masque to handle the skinning of this element."], 10, { buffs = L["Buffs"], debuffs = L["Debuffs"] }, nil, nil, function(_, key) return E.private.auras.masque[key] end, function(_, key, value) E.private.auras.masque[key] = value; E.ShowPopup = true end)

@@ -3,6 +3,37 @@ local S = E:GetModule("Skins")
 
 local _G = _G
 
+local function SkinWhoDropDown()
+	local dropdown, header = _G.WhoFrameDropDown, _G.WhoFrameColumnHeader2
+	if not dropdown or not header then return end
+
+	S:HandleDropDownBox(dropdown, header:GetWidth())
+	dropdown:ClearAllPoints()
+	dropdown:SetPoint("TOPLEFT", header, "TOPLEFT", 2, 0)
+	dropdown:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", -2, 0)
+	dropdown:SetHitRectInsets(0, 0, 0, 0)
+	dropdown.backdrop:ClearAllPoints()
+	dropdown.backdrop:SetPoint("TOPLEFT", dropdown, "TOPLEFT", 0, -2)
+	dropdown.backdrop:SetPoint("BOTTOMRIGHT", dropdown, "BOTTOMRIGHT", 0, 2)
+
+	local button = dropdown.Button or _G.WhoFrameDropDownButton
+	local text = dropdown.Text or _G.WhoFrameDropDownText
+	if button then
+		E:UnlockPoints(button)
+		button:ClearAllPoints()
+		button:SetSize(16, 16)
+		button:SetPoint("RIGHT", dropdown, "RIGHT", -2, 0)
+		E:LockPoints(button)
+		if text then
+			text:ClearAllPoints()
+			text:SetPoint("LEFT", dropdown, "LEFT", 4, 0)
+			text:SetPoint("RIGHT", button, "LEFT", -2, 0)
+			text:SetJustifyH("LEFT")
+			text:SetWordWrap(false)
+		end
+	end
+end
+
 local function LoadSkin()
 	if not E.private.skins.blizzard.enable or not E.private.skins.blizzard.friends then return end
 
@@ -54,8 +85,7 @@ local function LoadSkin()
 	S:HandleSirusButton(FriendsFrameUnsquelchButton, true)
 
 	WhoFrame:StripTextures()
-	S:HandleDropDownBox(WhoFrameDropDown, 120)
-	WhoFrameDropDown.backdrop:Point("TOPLEFT", 8, -2)
+	SkinWhoDropDown()
 
 	for i = 1, 5 do
 		local header = _G["WhoFrameColumnHeader"..i]
@@ -63,6 +93,14 @@ local function LoadSkin()
 			header:StripTextures()
 			header:StyleButton()
 			S:ApplyElvUIFont(header)
+			local text = header:GetFontString()
+			if text then
+				text:ClearAllPoints()
+				text:SetPoint("LEFT", header, "LEFT", 4, 0)
+				text:SetPoint("RIGHT", header, "RIGHT", -4, 0)
+				text:SetJustifyH("LEFT")
+				text:SetWordWrap(false)
+			end
 		end
 	end
 

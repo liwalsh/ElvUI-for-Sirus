@@ -3,12 +3,21 @@ local C, L = unpack(E.Config)
 local NP = E:GetModule("NamePlates")
 local ACD = E.Libs.AceConfigDialog
 
+local sirusStackLayouts = NP:IsSirusNameplates() and {
+	["OVERLAP"] = _G.UNIT_NAMEPLATES_STACK_LAYOUT_OVERLAP,
+	["PILE"] = _G.UNIT_NAMEPLATES_STACK_LAYOUT_PILE,
+	["COLUMN"] = _G.UNIT_NAMEPLATES_STACK_LAYOUT_COLUMN
+}
+
 local next, pairs, type, tonumber = next, pairs, type, tonumber
 local format, match, strsplit = string.format, string.match, strsplit
 
 local GetSpellInfo = GetSpellInfo
 
 local positionValues = {
+	TOP = "TOP",
+	BOTTOM = "BOTTOM",
+	CENTER = "CENTER",
 	BOTTOMLEFT = "BOTTOMLEFT",
 	BOTTOMRIGHT = "BOTTOMRIGHT",
 	LEFT = "LEFT",
@@ -1870,6 +1879,102 @@ function C:StyleFilterDeleted(value)
 end
 
 local ORDER = 100
+local PLATE_LABEL_LAYERS = {}
+for _, layer in ipairs(E.DrawLayers) do
+	PLATE_LABEL_LAYERS[layer] = layer
+end
+local function PlateLabelOptions(unit, key, name, order)
+	return {
+		order = order, type = "group", name = name,
+		get = function(info) return E.db.nameplates.units[unit][key][info[#info]] end,
+		set = function(info, value) E.db.nameplates.units[unit][key][info[#info]] = value NP:ConfigureAll() end,
+		args = {
+			enable = { order = 1, type = "toggle", name = L["Enable"] },
+			position = { order = 2, type = "select", name = L["Position"], values = { TOPLEFT = L["TOPLEFT"], TOP = L["TOP"], TOPRIGHT = L["TOPRIGHT"], LEFT = L["LEFT"], CENTER = L["CENTER"], RIGHT = L["RIGHT"], BOTTOMLEFT = L["BOTTOMLEFT"], BOTTOM = L["BOTTOM"], BOTTOMRIGHT = L["BOTTOMRIGHT"] } },
+			xOffset = { order = 3, type = "range", name = L["X-Offset"], min = -200, max = 200, step = 1 },
+			yOffset = { order = 4, type = "range", name = L["Y-Offset"], min = -200, max = 200, step = 1 },
+			font = { order = 5, type = "select", name = L["Font"], dialogControl = "LSM30_Font", values = AceGUIWidgetLSMlists.font },
+			fontSize = { order = 6, type = "range", name = L["Font Size"], min = 6, max = 32, step = 1 },
+			fontOutline = { order = 7, type = "select", name = L["Font Outline"], values = { NONE = L["None"], OUTLINE = "OUTLINE", THICKOUTLINE = "THICKOUTLINE" } },
+			justifyH = { order = 8, type = "select", name = L["JustifyH"], values = { LEFT = L["Left"], CENTER = L["Center"], RIGHT = L["Right"] } },
+			layer = { order = 9, type = "select", name = L["Draw Layer"], values = PLATE_LABEL_LAYERS, sorting = E.DrawLayers }
+		}
+	}
+end
+
+local function CustomTextOptions(unit)
+	local group = { order = 8.2, type = "group", name = L["Custom Texts"], args = {} }
+	local function Configs()
+		local db = E.db.nameplates.units[unit]
+		db.customTexts = db.customTexts or {}
+		return db.customTexts
+	end
+	local function Refresh()
+		local args, configs = group.args, Configs()
+		for key in pairs(args) do
+			if key:sub(1, 5) == "text:" and not configs[key:sub(6)] then args[key] = nil end
+		end
+		for name in pairs(configs) do
+			local textName, optionKey = name, "text:"..name
+			if not args[optionKey] then
+				args[optionKey] = {
+					order = -1, type = "group", name = textName,
+					get = function(info) local db = Configs()[textName] return db and db[info[#info]] end,
+					set = function(info, value)
+						local db = Configs()[textName]
+						if db then db[info[#info]] = value NP:ConfigureAll() end
+					end,
+					args = {
+						header = { order = 1, type = "header", name = textName },
+						delete = { order = 2, type = "execute", name = L["Delete"], confirm = true, func = function()
+							Configs()[textName] = nil
+							Refresh()
+							NP:ConfigureAll()
+						end },
+						enable = { order = 3, type = "toggle", name = L["Enable"], get = function() local db = Configs()[textName] return db and db.enable ~= false end },
+						font = { order = 4, type = "select", name = L["Font"], dialogControl = "LSM30_Font", values = AceGUIWidgetLSMlists.font },
+						size = { order = 5, type = "range", name = L["Font Size"], min = 6, max = 32, step = 1 },
+						fontOutline = { order = 6, type = "select", name = L["Font Outline"], desc = L["Set the font outline."], values = C.Values.FontFlags, sorting = C.Values.FontSorting },
+						justifyH = { order = 7, type = "select", name = L["JustifyH"], desc = L["Sets the font instance's horizontal text alignment style."], values = { LEFT = L["Left"], CENTER = L["Center"], RIGHT = L["Right"] } },
+						layer = { order = 7.5, type = "select", name = L["Draw Layer"], values = PLATE_LABEL_LAYERS, sorting = E.DrawLayers,
+							get = function() local db = Configs()[textName] return db and db.layer or "OVERLAY" end },
+						xOffset = { order = 8, type = "range", name = L["X-Offset"], min = -400, max = 400, step = 1 },
+						yOffset = { order = 9, type = "range", name = L["Y-Offset"], min = -400, max = 400, step = 1 },
+						attachTextTo = { order = 10, type = "select", name = L["Attach Text To"], values = { Frame = L["Frame"], Health = L["Health"], Name = L["Name"], CastBar = L["Castbar"] } },
+						position = { order = 11, type = "select", name = L["Position"], values = { AUTO = L["Automatic"], LEFT = L["LEFT"], RIGHT = L["RIGHT"], CENTER = L["CENTER"], TOP = L["TOP"], BOTTOM = L["BOTTOM"], TOPLEFT = L["TOPLEFT"], TOPRIGHT = L["TOPRIGHT"], BOTTOMLEFT = L["BOTTOMLEFT"], BOTTOMRIGHT = L["BOTTOMRIGHT"] },
+							get = function() local db = Configs()[textName] return db and db.position or "AUTO" end,
+							set = function(_, value) local db = Configs()[textName] if db then db.position = value ~= "AUTO" and value or nil NP:ConfigureAll() end end },
+						text_format = { order = 100, type = "input", name = L["Text Format"], desc = L["TEXT_FORMAT_DESC"], width = "full" }
+					}
+				}
+			end
+		end
+	end
+	group.args.header = { order = 1, type = "header", name = L["Custom Texts"] }
+	group.args.create = {
+		order = 2, type = "input", name = L["Create Custom Text"], width = "full",
+		get = function() return "" end,
+		set = function(_, name)
+			name = name:match("^%s*(.-)%s*$")
+			if name == "" then return end
+			local configs = Configs()
+			for key in pairs(E.db.nameplates.units[unit]) do
+				if key:lower() == name:lower() then E:Print(L["The name you have selected is already in use by another element."]) return end
+			end
+			for key in pairs(configs) do
+				if key:lower() == name:lower() then E:Print(L["The name you have selected is already in use by another element."]) return end
+			end
+			local db = E.db.nameplates
+			configs[name] = { enable = true, text_format = "", size = db.fontSize, font = db.font, fontOutline = db.fontOutline, justifyH = "CENTER", attachTextTo = "Health", xOffset = 0, yOffset = 0, layer = "OVERLAY" }
+			Refresh()
+			NP:ConfigureAll()
+		end
+	}
+	group.hidden = function() Refresh() return false end
+	Refresh()
+	return group
+end
+
 local function GetUnitSettings(unit, name)
 	local copyValues = {}
 	for x, y in pairs(NP.db.units) do
@@ -3606,6 +3711,100 @@ local function GetUnitSettings(unit, name)
 		}
 	}
 
+	group.args.healthGroup.args.absorb = {
+		order = 6, type = "group", name = L["Absorption"], guiInline = true,
+		get = function(info) return E.db.nameplates.units[unit].health.absorb[info[#info]] end,
+		set = function(info, value) E.db.nameplates.units[unit].health.absorb[info[#info]] = value NP:ConfigureAll() end,
+		args = {
+			enable = { order = 1, type = "toggle", name = L["Enable"] },
+			showText = {
+				order = 2, type = "toggle", name = L["Absorb Amount"],
+				disabled = function() return not E.db.nameplates.units[unit].health.absorb.enable end
+			},
+			positionGroup = {
+				order = 3, type = "group", name = L["Position"], guiInline = true,
+				disabled = function()
+					local db = E.db.nameplates.units[unit].health.absorb
+					return not db.enable or not db.showText
+				end,
+				args = {
+					position = {
+						order = 1, type = "select", name = L["Position"],
+						values = {
+							TOPLEFT = L["TOPLEFT"], TOP = L["TOP"], TOPRIGHT = L["TOPRIGHT"],
+							LEFT = L["LEFT"], CENTER = L["CENTER"], RIGHT = L["RIGHT"],
+							BOTTOMLEFT = L["BOTTOMLEFT"], BOTTOM = L["BOTTOM"], BOTTOMRIGHT = L["BOTTOMRIGHT"]
+						}
+					},
+					xOffset = { order = 2, type = "range", name = L["X-Offset"], min = -200, max = 200, step = 1 },
+					yOffset = { order = 3, type = "range", name = L["Y-Offset"], min = -200, max = 200, step = 1 }
+				}
+			},
+			fontGroup = {
+				order = 4, type = "group", name = L["Fonts"], guiInline = true,
+				disabled = function()
+					local db = E.db.nameplates.units[unit].health.absorb
+					return not db.enable or not db.showText
+				end,
+				args = {
+					font = {
+						order = 1, type = "select", name = L["Font"],
+						dialogControl = "LSM30_Font", values = AceGUIWidgetLSMlists.font
+					},
+					fontSize = {
+						order = 2, type = "range", name = L["Font Size"],
+						min = 4, max = 32, step = 1
+					},
+					fontOutline = {
+						order = 3, type = "select", name = L["Font Outline"], desc = L["Set the font outline."],
+						values = C.Values.FontFlags, sorting = C.Values.FontSorting
+					}
+				}
+			}
+		}
+	}
+	if unit == "ENEMY_NPC" then
+		group.args.threatText = PlateLabelOptions(unit, "threatText", L["Threat Level"], 8)
+	end
+	group.args.customText = CustomTextOptions(unit)
+	for key, aura in pairs({ buffsGroup = "buffs", debuffsGroup = "debuffs", crowdControlGroup = "crowdcontrol" }) do
+		local args = group.args[key].args
+		args.resetSirusPosition = {
+			order = 1.1, type = "execute", name = L["Reset Position"],
+			desc = L["Restore the default Sirus client anchors."],
+			func = function()
+				local db = E.db.nameplates.units[unit][aura]
+				local defaults = P.nameplates.units[unit][aura]
+				for _, key in ipairs({ "anchorPoint", "attachTo", "xOffset", "yOffset" }) do db[key] = defaults[key] end
+				db.useSirusPosition = true
+				NP:ConfigureAll()
+			end
+		}
+		args.useSirusPosition = {
+			order = 1.15, type = "toggle", name = L["Sirus Position"],
+			get = function() return E.db.nameplates.units[unit][aura].useSirusPosition ~= false end,
+			set = function(_, value) E.db.nameplates.units[unit][aura].useSirusPosition = value NP:ConfigureAll() end
+		}
+		args.useSirusSize = {
+			order = 1.2, type = "toggle", name = L["Sirus Size and Spacing"],
+			get = function() return E.db.nameplates.units[unit][aura].useSirusSize ~= false end,
+			set = function(_, value) E.db.nameplates.units[unit][aura].useSirusSize = value NP:ConfigureAll() end
+		}
+		for _, name in ipairs({ "anchorPoint", "attachTo", "xOffset", "yOffset" }) do
+			args[name].set = function(info, value)
+				local db = E.db.nameplates.units[unit][aura]
+				db[info[#info]] = value
+				db.useSirusPosition = false
+				NP:ConfigureAll()
+			end
+		end
+		for _, name in ipairs({ "size", "spacing" }) do
+			if args[name] then args[name].disabled = function() return E.db.nameplates.units[unit][aura].useSirusSize ~= false end end
+		end
+		args.attachTo.values.NAME = L["Name"]
+		args.attachTo.values.LEVEL = L["Level"]
+		if aura == "buffs" then args.attachTo.values.BUFFS = nil end
+	end
 	if unit == "FRIENDLY_PLAYER" or unit == "ENEMY_PLAYER" then
 		if unit == "ENEMY_PLAYER" then
 			group.args.markHealers = {
@@ -3817,11 +4016,21 @@ E.Options.args.nameplates = {
 							order = 3,
 							type = "select",
 							name = L["UNIT_NAMEPLATES_TYPES"],
-							desc = L["Set to either stack nameplates vertically or allow them to overlap."],
-							values = {
+							desc = sirusStackLayouts and _G.OPTION_TOOLTIP_UNIT_NAMEPLATES_STACK_LAYOUT or L["Set to either stack nameplates vertically or allow them to overlap."],
+							values = sirusStackLayouts or {
 								["STACKED"] = L["UNIT_NAMEPLATES_TYPE_2"],
 								["OVERLAP"] = L["UNIT_NAMEPLATES_TYPE_1"]
-							}
+							},
+							sorting = sirusStackLayouts and { "OVERLAP", "PILE", "COLUMN" } or nil,
+							customWidth = 250,
+							get = function(info)
+								return NP:GetSirusStackLayout() or E.db.nameplates[info[#info]]
+							end,
+							set = function(info, value)
+								E.db.nameplates[info[#info]] = value
+								NP:SetSirusStackLayout(value)
+								NP:ConfigureAll()
+							end
 						},
 						lowHealthThreshold = {
 							order = 4,
@@ -4607,40 +4816,5 @@ for i = 1, 5 do
 			t.r, t.g, t.b = r, g, b
 			NP:ConfigureAll()
 		end
-	}
-end
-
-do
-	local function AddClientAuraNotice(group)
-		if not (group and group.args) then return end
-
-		group.args.clientAuras = {
-			order = 0.5,
-			type = "description",
-			name = L["The game client decides which auras a nameplate can show and in what order: its own aura display options, buff and debuff rules, spell blacklists and crowd control. ElvUI draws them in its own style. The Enable toggle and the filters below can hide some of these auras, but cannot add auras the client does not show."],
-			hidden = function() return not NP:IsSirusNameplates() end
-		}
-	end
-
-	for _, group in pairs(E.Options.args.nameplates.args) do
-		if type(group) == "table" and group.args then
-			AddClientAuraNotice(group.args.buffsGroup)
-			AddClientAuraNotice(group.args.debuffsGroup)
-			AddClientAuraNotice(group.args.crowdControlGroup)
-		end
-	end
-
-	local general = E.Options.args.nameplates.args.generalGroup.args.general.args
-
-	general.clientStacking = {
-		order = 3,
-		type = "description",
-		name = function()
-			local layout = NP:GetSirusStackLayout()
-			local text = layout and (_G["UNIT_NAMEPLATES_STACK_LAYOUT_" .. layout] or layout)
-
-			return text and format(L["Nameplate stacking is set in the game client's nameplate options: %s"], format("|cffFFD100%s|r", text)) or ""
-		end,
-		hidden = function() return not NP:IsSirusNameplates() end
 	}
 end

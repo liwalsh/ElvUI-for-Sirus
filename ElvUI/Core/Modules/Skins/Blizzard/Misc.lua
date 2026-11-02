@@ -85,8 +85,9 @@ S:AddCallback('Skin_Misc', function()
 		staticPopup:SetTemplate('Transparent')
 
 		S:HandleEditBox(itemFrameBox)
-		itemFrameBox.backdrop:Point('TOPLEFT', -2, -4)
-		itemFrameBox.backdrop:Point('BOTTOMRIGHT', 2, 4)
+		itemFrameBox.backdrop:ClearAllPoints()
+		itemFrameBox.backdrop:SetPoint('TOPLEFT', itemFrameBox, 'TOPLEFT', -2, 0)
+		itemFrameBox.backdrop:SetPoint('BOTTOMRIGHT', itemFrameBox, 'BOTTOMRIGHT', 2, 0)
 
 		S:HandleEditBox(_G['StaticPopup'..i..'MoneyInputFrameGold'])
 		S:HandleEditBox(_G['StaticPopup'..i..'MoneyInputFrameSilver'])
@@ -183,12 +184,22 @@ S:AddCallback('Skin_Misc', function()
 
 		select(8, wideBox:GetRegions()):Hide()
 		S:HandleEditBox(wideBox)
-		wideBox:Height(22)
 
 		for j = 1, 3 do
 			S:HandleButton(_G['StaticPopup'..i..'Button'..j])
 		end
 	end
+
+	hooksecurefunc('StaticPopup_Resize', function(dialog)
+		local info = _G.StaticPopupDialogs[dialog.which]
+		if info and info.hasEditBox and info.hasWideEditBox then
+			local wideBox = _G[dialog:GetName()..'WideEditBox']
+			if not info.hasMultiLine then wideBox:SetHeight(24) end
+			wideBox.backdrop:ClearAllPoints()
+			wideBox.backdrop:SetPoint('TOPLEFT', wideBox, 'TOPLEFT', -4, 0)
+			wideBox.backdrop:SetPoint('BOTTOMRIGHT', wideBox, 'BOTTOMRIGHT', 4, 0)
+		end
+	end)
 
 	S:SkinDropDownMenu('DropDownList')
 

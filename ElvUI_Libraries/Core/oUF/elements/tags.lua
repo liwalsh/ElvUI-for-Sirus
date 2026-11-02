@@ -623,7 +623,7 @@ local function GetTagFunc(tagstr)
 
 		func = function(self)
 			local parent = self.parent
-			local unit = parent.unit
+			local unit = self.__previewUnit or parent.unit
 			local realUnit = self.overrideUnit and parent.realUnit
 			local customArgs = parent.__customargs[self]
 
@@ -955,6 +955,22 @@ local function StripTag(tag) -- remove prefix, custom args, and suffix
 end
 
 oUF.Tags = {
+	Attach = function(_, frame)
+		frame.Tag, frame.Untag, frame.UpdateTags = Tag, Untag, Update
+		frame.ColorGradient = oUF.ColorGradient
+		frame.colors = frame.colors or oUF.colors
+		frame.__elements = frame.__elements or {}
+	end,
+	NeedsFrequentUpdates = function(_, format)
+		format = format:gsub('{.-}%]', ']')
+		for bracket in format:gmatch(_PATTERN) do
+			local tag = GetTagName(bracket)
+			if tagFuncs[tag] and not tagEvents[tag] and not onUpdateDelay[tag] then
+				return true
+			end
+		end
+		return false
+	end,
 	Env = _ENV,
 	Methods = tagFuncs,
 	Events = tagEvents,

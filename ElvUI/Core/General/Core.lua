@@ -72,6 +72,46 @@ E.TexturePath = [[Interface\AddOns\ElvUI\Core\Media\Textures\]] -- for plugins?
 E.ClearTexture = '' -- used to clear: Set (Normal, Disabled, Checked, Pushed, Highlight) Texture
 E.UserList = {}
 
+E.DrawLayers = { 'BACKGROUND', 'BORDER', 'ARTWORK', 'OVERLAY', 'HIGHLIGHT' }
+E.DrawLayerLevel = { BACKGROUND = -2, BORDER = -1, ARTWORK = 0, OVERLAY = 1, HIGHLIGHT = 2 }
+
+function E:GetDrawLayerLevel(layer)
+	return E.DrawLayerLevel[layer] or E.DrawLayerLevel.OVERLAY
+end
+
+E.RaidIconStyles = {
+	elvui = { title = 'ElvUI', texture = E.TexturePath..'RaidIcons' },
+	blizzard = { title = 'Blizzard', texture = [[Interface\TargetingFrame\UI-RaidTargetingIcons]] },
+}
+
+function E:SetRaidIconTexture(texture, index)
+	local style = E.RaidIconStyles[E.db.general.raidIconStyle] or E.RaidIconStyles.blizzard
+
+	texture:SetTexture(style.texture)
+	SetRaidTargetIconTexture(texture, index)
+end
+
+function E:GetRaidIconStyleValues()
+	local values = {}
+
+	for key, style in pairs(E.RaidIconStyles) do
+		local preview = ''
+		for i = 0, 7 do
+			local left, top = (i % 4) * 64, math.floor(i / 4) * 64
+			preview = preview..format('|T%s:14:14:0:0:256:256:%d:%d:%d:%d|t', style.texture, left, left + 64, top, top + 64)
+		end
+
+		values[key] = preview..' '..style.title
+	end
+
+	return values
+end
+
+function E:UpdateRaidIcons()
+	NamePlates:ConfigureAll()
+	UnitFrames:UpdateRaidIcons()
+end
+
 -- oUF Defines
 E.oUF.Tags.Vars.E = E
 E.oUF.Tags.Vars.L = L
@@ -537,6 +577,14 @@ do
 				name = 'ElvUI Raid Frames'
 			},
 			'Cell'
+		},
+		AddonManager = {
+			info = {
+				enabled = function() return E.private.general.addonManager end,
+				accept = function() E.private.general.addonManager = false; ReloadUI() end,
+				name = 'ElvUI AddOn Manager'
+			},
+			'ACP'
 		},
 		ToolTip = {
 			info = {
@@ -1958,7 +2006,7 @@ function E:Initialize()
 			local msg = format(L["LOGIN_MSG"], E.versionString)
 
 			if Chat.Initialized then -- setup the link
-				_, msg = Chat:FindURL('CHAT_MSG_DUMMY', msg)
+				msg = select(2, Chat:FindURL('CHAT_MSG_DUMMY', msg))
 			end
 
 			print(msg)

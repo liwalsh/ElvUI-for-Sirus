@@ -228,8 +228,9 @@ function E:NudgeMover(nudgeX, nudgeY)
 	local x, y, point = E:CalculateMoverPoints(mover, nudgeX, nudgeY)
 
 	mover:ClearAllPoints()
-	mover:SetPoint(point, E.UIParent, point, x, y)
+	mover:SetPoint(point, UIParent, point, x, y)
 	E:SaveMoverPosition(mover.name)
+	E:SnapMover(mover)
 
 	--Update coordinates in Nudge Window
 	E:UpdateNudgeFrame(mover, x, y)
@@ -732,18 +733,14 @@ end
 function E:Config_SliderOnMouseWheel(offset)
 	local _, maxValue = self:GetMinMaxValues()
 	if maxValue == 0 then return end
-
-	local newValue = self:GetValue() - offset
-	if newValue < 0 then newValue = 0 end
-	if newValue > maxValue then return end
-
-	self:SetValue(newValue)
-	self.buttons:Point('TOPLEFT', 0, newValue * 36)
+	self:SetValue(math.max(0, min(maxValue, self:GetValue() - offset * 36)))
 end
 
 function E:Config_SliderOnValueChanged(value)
-	self:SetValue(value)
-	self.buttons:Point('TOPLEFT', 0, value * 36)
+	local _, maxValue = self:GetMinMaxValues()
+	value = math.max(0, min(maxValue, value))
+	if self:GetValue() ~= value then self:SetValue(value) end
+	self.buttons:Point('TOPLEFT', 0, value)
 end
 
 function E:Config_SetButtonText(btn, noColor)
@@ -796,9 +793,16 @@ end
 
 function E:Config_UpdateSliderPosition(btn)
 	local left = btn and btn.frame and btn.frame.leftHolder
-	if left and left.slider then
-		E.Config_SliderOnValueChanged(left.slider, btn.sliderValue or 0)
+	local slider = left and left.slider
+	if not (slider and btn.sliderTop and btn.sliderBottom) then return end
+
+	local value = slider:GetValue()
+	if btn.sliderTop < value then
+		value = btn.sliderTop
+	elseif btn.sliderBottom > value + slider.viewportHeight then
+		value = btn.sliderBottom - slider.viewportHeight
 	end
+	slider:SetValue(value)
 end
 
 function E:Config_CreateFrame(info, frame, unskinned, frameType, ...)
@@ -855,6 +859,7 @@ end
 function E:Config_UpdateLeftButtons()
 	local frame = E:Config_GetWindow()
 	if not (frame and frame.leftHolder) then return end
+	E:Config_UpdateLeftScroller(frame)
 
 	local _, selected = E:Config_GetStatus(frame)
 	for _, btn in next, frame.leftHolder.buttons do
@@ -867,42 +872,44 @@ function E:Config_UpdateLeftButtons()
 			end
 		end
 	end
+
+	local whatsNew = frame.bottomHolder and frame.bottomHolder.WhatsNew
+	if whatsNew then
+		E:Config_SetButtonColor(whatsNew, whatsNew.info.key == selected)
+	end
 end
 
 function E:Config_UpdateLeftScroller(frame)
 	local left = frame and frame.leftHolder
-	if not left then return end
+	if not (left and left.buttons and left.buttonsScrollFrame and left.slider) then return end
 
-	local btns = left.buttons
-	local bottom = btns:GetBottom()
-	if not bottom then return end
-	btns:Point('TOPLEFT', 0, 0)
+	local btns, viewport = left.buttons, left.buttonsScrollFrame
+	local top, height = btns:GetTop(), viewport:GetHeight()
+	if not top or not height or height <= 0 then return end
 
-	local max = 0
+	local contentHeight = 0
 	for _, btn in next, btns do
 		local button = type(btn) == 'table' and btn.IsObjectType and btn:IsObjectType('Button')
 		if button then
-			btn.sliderValue = nil
-
-			local btm = btn:GetBottom()
-			if btm then
-				if bottom > btm then
-					max = max + 1
-					btn.sliderValue = max
-				end
+			btn.sliderValue, btn.sliderTop, btn.sliderBottom = nil, nil, nil
+			local buttonTop, bottom = btn:GetTop(), btn:GetBottom()
+			if btn:IsShown() and buttonTop and bottom then
+				btn.sliderTop, btn.sliderBottom = top - buttonTop, top - bottom
+				contentHeight = math.max(contentHeight, btn.sliderBottom)
+				btn.sliderValue = math.max(0, btn.sliderBottom - height)
 			end
 		end
 	end
 
+	local max = math.max(0, contentHeight - height)
+	if max <= E:PixelSize(1, viewport) then max = 0 end
 	local slider = left.slider
+	local value = min(slider:GetValue(), max)
+	slider.viewportHeight = height
 	slider:SetMinMaxValues(0, max)
-	slider:SetValue(0)
-
-	if max == 0 then
-		slider.thumb.holder:Hide()
-	else
-		slider.thumb.holder:Show()
-	end
+	slider:SetValue(value)
+	E.Config_SliderOnValueChanged(slider, value)
+	slider.thumb.holder:SetShown(max > 0)
 end
 
 function E:Config_SaveOldFramelevel(frame)
@@ -1009,7 +1016,7 @@ function E:Config_CreateLeftButtons(frame, unskinned, options)
 			if ACD then ACD:SelectGroup('ElvUI', key) end
 		end
 
-		if key ~= 'search' then
+		if key ~= 'search' and key ~= 'changelog' then
 			last = E:Config_HandleLeftButton(info, frame, unskinned, buttons, last, index)
 		end
 	end
@@ -1115,6 +1122,7 @@ function E:Config_WindowOpened(frame)
 		frame.leftHolder.slider:Show()
 		frame.closeButton:Show()
 		frame.originalClose:Hide()
+		E:Config_UpdateLeftScroller(frame)
 
 		frame.leftHolder.LogoTop:SetVertexColor(unpack(E.media.rgbvaluecolor))
 		ConfigLogoTop = frame.leftHolder.LogoTop
@@ -1174,6 +1182,8 @@ function E:Config_WindowOpened(frame)
 			statusParent:Point('BOTTOMRIGHT', frame, -2, 2)
 		end
 	end
+
+	E:Config_UpdateLeftButtons()
 end
 
 function E:Config_CreateBottomButtons(frame, unskinned)
@@ -1222,6 +1232,7 @@ function E:Config_CreateBottomButtons(frame, unskinned)
 		},
 		{
 			var = 'WhatsNew',
+			key = 'changelog',
 			name = L["Whats New"],
 			hidden = function()
 				return C.SearchText ~= "" or next(C.SearchCache)
@@ -1501,6 +1512,7 @@ function E:ToggleOptions(msg)
 			local buttonsScrollFrame = CreateFrame('ScrollFrame', nil, buttonsHolder) -- SetClipsChildren does not exist in 3.3.5, lets do this instead
 			buttonsScrollFrame:SetAllPoints(buttonsHolder)
 			left.buttonsScrollFrame = buttonsScrollFrame
+			buttonsScrollFrame:HookScript('OnSizeChanged', function() E:Config_UpdateLeftScroller(frame) end)
 
 			local buttonsScrollFrameChild = CreateFrame('Frame', nil, buttonsScrollFrame)
 			buttonsScrollFrame:SetScrollChild(buttonsScrollFrameChild)
@@ -1521,7 +1533,7 @@ function E:ToggleOptions(msg)
 			slider:SetValueStep(1)
 			slider:SetValue(0)
 			slider:Width(192)
-			slider:Point('TOPLEFT', buttons, 'TOPLEFT', 0, 0)
+			slider:Point('TOPLEFT', buttonsHolder, 'TOPLEFT', 0, 0)
 			slider:Point('BOTTOMRIGHT', left, 'BOTTOMRIGHT', unskinned and 3 or 0, unskinned and 10 or 1)
 			slider.buttons = buttons
 			left.slider = slider

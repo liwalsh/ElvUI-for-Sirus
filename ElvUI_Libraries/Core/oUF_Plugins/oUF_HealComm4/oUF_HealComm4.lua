@@ -64,6 +64,9 @@ local hasAbsorbs = UnitGetTotalAbsorbs and true or false
 local HealComm = LibStub("LibHealComm-4.0")
 
 local enabledUF, enabled = {}
+local pendingGUIDs, spareGUIDs = {}, {}
+local updateFrame = CreateFrame("Frame")
+updateFrame:Hide()
 
 local function Update(self)
 	local unit = self.unit
@@ -80,16 +83,20 @@ local function Update(self)
 	end
 
 	local guid = UnitGUID(unit)
+	local playerGUID = UnitGUID("player")
 	local timeFrame = self.HealCommTimeframe and GetTime() + self.HealCommTimeframe or nil
-	local myIncomingHeal = HealComm:GetHealAmount(guid, HealComm.ALL_HEALS, timeFrame, UnitGUID("player")) or 0
-	local allIncomingHeal = HealComm:GetHealAmount(guid, HealComm.ALL_HEALS, timeFrame) or 0
+	local modifier = guid and (HealComm:GetHealModifier(guid) or 1) or 1
+	local myIncomingHeal = guid and playerGUID and (HealComm:GetHealAmount(guid, HealComm.ALL_HEALS, timeFrame, playerGUID) or 0) * modifier or 0
+	local allIncomingHeal = guid and (HealComm:GetHealAmount(guid, HealComm.ALL_HEALS, timeFrame) or 0) * modifier or 0
 	local health = UnitHealth(unit)
 	local maxHealth = UnitHealthMax(unit)
 	local maxOverflowHP = maxHealth * element.maxOverflow
+	local healAbsorb = (UnitGetTotalHealAbsorbs and UnitGetTotalHealAbsorbs(unit)) or 0
+	local currentHealAbsorb = math.min(health, healAbsorb)
 	local otherIncomingHeal = 0
 
-	if health + allIncomingHeal > maxOverflowHP then
-		allIncomingHeal = maxOverflowHP - health
+	if health - currentHealAbsorb + allIncomingHeal > maxOverflowHP then
+		allIncomingHeal = math.max(0, maxOverflowHP - health + currentHealAbsorb)
 	end
 
 	if allIncomingHeal < myIncomingHeal then
@@ -111,16 +118,15 @@ local function Update(self)
 	end
 
 	-- absorbs are fed by the server (UNIT_ABSORB_AMOUNT_CHANGED), LibHealComm knows nothing about them
-	local absorb, healAbsorb, hasOverAbsorb, hasOverHealAbsorb = 0, 0, false, false
+	local absorb, hasOverAbsorb, hasOverHealAbsorb = 0, false, false
 	if hasAbsorbs then
 		absorb = UnitGetTotalAbsorbs(unit) or 0
-		healAbsorb = (UnitGetTotalHealAbsorbs and UnitGetTotalHealAbsorbs(unit)) or 0
 
 		if healAbsorb > health then
 			hasOverHealAbsorb = true
 		end
 
-		if absorb > 0 and health + absorb >= maxHealth then
+		if absorb > 0 and (health + absorb >= maxHealth or health - currentHealAbsorb + allIncomingHeal + absorb >= maxHealth) then
 			hasOverAbsorb = true
 		end
 
@@ -156,31 +162,38 @@ local function Update(self)
 	end
 end
 
-local function Path(self, ...)
-	--[[ Override: HealthPrediction.Override(self, event, unit)
-	Used to completely override the internal update function.
-
-	* self  - the parent object
-	* event - the event triggering the update (string)
-	* unit  - the unit accompanying the event
-	--]]
-	return (self.HealCommBar.Override or Update) (self, ...)
+local function Path(self, event, unit, ...)
+	if unit and unit ~= self.unit then return end
+	return (self.HealCommBar.Override or Update) (self, event, unit, ...)
 end
 
 local function ForceUpdate(element)
 	return Path(element.__owner, "ForceUpdate", element.__owner.unit)
 end
 
-local function MultiUpdate(...)
-	for i = 1, select("#", ...) do
-		for j = 1, #enabledUF do
-			local frame = enabledUF[j]
+updateFrame:SetScript("OnUpdate", function(self)
+	self:Hide()
+	local changedGUIDs = pendingGUIDs
+	pendingGUIDs, spareGUIDs = spareGUIDs, pendingGUIDs
 
-			if frame.unit and frame:IsVisible() and UnitGUID(frame.unit) == select(i, ...) then
+	for j = 1, #enabledUF do
+		local frame = enabledUF[j]
+		if frame.unit and frame:IsVisible() then
+			local guid = UnitGUID(frame.unit)
+			if guid and changedGUIDs[guid] then
 				Path(frame)
 			end
 		end
 	end
+	wipe(changedGUIDs)
+end)
+
+local function MultiUpdate(...)
+	for i = 1, select("#", ...) do
+		local guid = select(i, ...)
+		if guid then pendingGUIDs[guid] = true end
+	end
+	if next(pendingGUIDs) then updateFrame:Show() end
 end
 
 local function HealComm_Heal_Update(event, casterGUID, spellID, healType, _, ...)
@@ -274,6 +287,9 @@ local function Disable(self)
 		if element.healAbsorbBar then
 			element.healAbsorbBar:Hide()
 		end
+
+		if element.overAbsorb then element.overAbsorb:Hide() end
+		if element.overHealAbsorb then element.overHealAbsorb:Hide() end
 
 		self:UnregisterEvent("UNIT_HEALTH", Path)
 		self:UnregisterEvent("UNIT_MAXHEALTH", Path)

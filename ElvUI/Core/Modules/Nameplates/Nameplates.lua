@@ -117,9 +117,36 @@ end
 function NP:GetSirusStackLayout()
 	if not NP:IsSirusNameplates() then return end
 
-	local control = _G.InterfaceOptionsNamesPanelUnitNameplatesStackLayout
+	if GetCVar("nameplateAllowOverlap") == "1" then
+		return "OVERLAP"
+	elseif GetCVar("nameplateStackMode") == "0" then
+		return "PILE"
+	end
 
-	return control and control:GetValue()
+	return "COLUMN"
+end
+
+function NP:SetSirusStackLayout(layout)
+	if not NP:IsSirusNameplates() then return end
+
+	E:SetCVar("nameplateAllowOverlap", layout == "OVERLAP" and 1 or 0, "UNIT_NAMEPLATES_STACK_LAYOUT")
+
+	if layout ~= "OVERLAP" and GetCVar("nameplateStackMode") then
+		E:SetCVar("nameplateStackMode", layout == "PILE" and 0 or 1, "UNIT_NAMEPLATES_STACK_LAYOUT")
+	end
+
+	NP:RefreshSirusPlateSizes()
+end
+
+function NP:RefreshSirusPlateSizes()
+	NP.sirusStackHeight = nil
+	NP:UpdateClickableSizes()
+
+	for plate in pairs(NP.CreatedPlates) do
+		if plate.ElvUIFrame then
+			NP:SetSize(plate)
+		end
+	end
 end
 
 function NP:HookSirusStackLayout()
@@ -129,8 +156,7 @@ function NP:HookSirusStackLayout()
 	NP.sirusStackLayoutHooked = true
 
 	hooksecurefunc(control, "SetValue", function()
-		NP.sirusStackHeight = nil
-		NP:UpdateClickableSizes()
+		NP:RefreshSirusPlateSizes()
 	end)
 end
 
@@ -143,14 +169,7 @@ function NP:HookSirusPlateSize()
 	NP.sirusPlateSizeHooked = true
 
 	hooksecurefunc(driver, "UpdateNamePlateClickInsets", function()
-		NP.sirusStackHeight = nil
-		NP:UpdateClickableSizes()
-
-		for plate in pairs(NP.CreatedPlates) do
-			if plate.ElvUIFrame then
-				NP:SetSize(plate)
-			end
-		end
+		NP:RefreshSirusPlateSizes()
 	end)
 
 	hooksecurefunc(driver, "UpdateNamePlateHitTestArea", function(_, unit)
@@ -179,6 +198,7 @@ function NP:SetFrameScale(frame, scale, noPlayAnimation)
 
 			if frame.CrowdControl then
 				NP:Configure_Auras(frame, "CrowdControl")
+				NP:Configure_Auras(frame, "LossOfControl")
 			end
 		end
 	end
@@ -215,7 +235,7 @@ function NP:SetPlateFrameLevel(frame, level, isTarget)
 			frame.LossOfControl:SetFrameLevel(level+1)
 		end
 		if frame.RaidIcon then
-			frame.RaidIcon:GetParent():SetFrameLevel(level+2)
+			frame.RaidIcon:GetParent():SetFrameLevel(frame.CastBar.Icon:GetFrameLevel() + 1)
 		end
 	end
 end
@@ -452,7 +472,7 @@ function NP:OnShow(isConfig, dontHideHighlight, unitToken)
 
 		if frame.CrowdControl then
 			NP:Configure_Auras(frame, "CrowdControl")
-			frame.LossOfControl.anchoredIcons = 0
+			NP:Configure_Auras(frame, "LossOfControl")
 		end
 
 		if NP.db.units[unitType].health.enable or (frame.isTarget and NP.db.alwaysShowTargetHealth) then
@@ -468,6 +488,8 @@ function NP:OnShow(isConfig, dontHideHighlight, unitToken)
 
 	frame.CutawayHealth:Hide()
 
+	NP:Configure_PlateExtras(frame)
+	NP:Configure_CustomTexts(frame)
 	NP:RegisterEvents(frame)
 	NP:UpdateElement_All(frame, nil, true)
 
@@ -492,6 +514,10 @@ function NP:OnHide(isConfig)
 	local frame = self.ElvUIFrame
 	if not frame then return end
 
+	local unit = frame.unit
+	local hadHitTestOverride = frame.IconOnlyChanged
+
+	NP:Clear_CustomTexts(frame)
 	NP.VisiblePlates[frame] = nil
 
 	if frame.unit and NP.PlatesByUnit[frame.unit] == self then
@@ -515,6 +541,10 @@ function NP:OnHide(isConfig)
 	end
 
 	NP:StyleFilterClear(frame)
+
+	if unit and hadHitTestOverride then
+		NP:UpdateHitTestArea(unit)
+	end
 
 	if frame.currentScale and frame.currentScale ~= 1 then
 		NP:SetFrameScale(frame, 1, true)
@@ -620,6 +650,7 @@ function NP:UpdateElement_All(frame, noTargetFrame, filterIgnore)
 	end
 
 	NP:UpdateElement_Auras(frame)
+	NP:Update_ThreatText(frame)
 
 	NP:Update_RaidIcon(frame)
 	NP:Update_HealerIcon(frame)
@@ -655,22 +686,22 @@ local function GetPlateSize(unitType)
 end
 
 function NP:SetSize(frame)
+	local unitFrame = frame.ElvUIFrame
+	local width, height, mult, plateHeight = GetPlateSize(unitFrame and unitFrame.UnitType)
+
+	if unitFrame and NP:IsSirusNameplates() then
+		unitFrame:ClearAllPoints()
+		unitFrame:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+		unitFrame:SetSize(width, height)
+	end
+
 	if InCombatLockdown() then
 		NP.ResizeQueue[frame] = true
-	else
-		local unitFrame = frame.ElvUIFrame
-		local width, height, mult, plateHeight = GetPlateSize(unitFrame and unitFrame.UnitType)
-
-		frame:SetSize(width * mult, plateHeight)
-
-		if unitFrame and NP:IsSirusNameplates() then
-			unitFrame:ClearAllPoints()
-			unitFrame:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
-			unitFrame:SetSize(width, height)
-		end
-
-		NP.ResizeQueue[frame] = nil
+		return
 	end
+
+	frame:SetSize(width * mult, plateHeight)
+	NP.ResizeQueue[frame] = nil
 end
 
 function NP:GetSirusStackHeight()
@@ -859,8 +890,16 @@ function NP:OnEvent(event, unit, ...)
 		return
 	end
 
+	if event == "UNIT_ABSORB_AMOUNT_CHANGED" then
+		NP:Update_Absorb(self)
+		return
+	end
+
 	if event == "UNIT_AURA" then
-		NP:UpdateElement_Auras(self)
+		NP:Update_Absorb(self)
+		if not NP:IsSirusNameplates() then
+			NP:UpdateElement_Auras(self)
+		end
 		return
 	end
 
@@ -886,7 +925,7 @@ function NP:OnEvent(event, unit, ...)
 end
 
 local unitEvents = {
-	"UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTION", "UNIT_AURA"
+	"UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTION", "UNIT_AURA", "UNIT_ABSORB_AMOUNT_CHANGED"
 }
 local castEvents = {
 	"UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_START",
@@ -1053,6 +1092,7 @@ function NP:SetMouseoverFrame(frame)
 
 		NP:Update_Highlight(frame)
 	end
+	NP:UpdateCustomTextMouseover(frame)
 end
 
 -- the engine places plates on fractional pixels, which smears the 1px border over two rows
@@ -1103,7 +1143,10 @@ pixelSnapper:SetScript("OnUpdate", function(_, elapsed)
 
 				NP:Update_Health(frame)
 				NP:Update_HealthColor(frame)
+			else
+				NP:Update_Absorb(frame)
 			end
+			NP:Update_ThreatText(frame)
 		end
 	end
 end)
@@ -1241,6 +1284,7 @@ function NP:UNIT_THREAT_LIST_UPDATE(_, unit)
 
 	for frame in pairs(NP.VisiblePlates) do
 		if frame.unit and UnitIsUnit(frame.unit, unit) then
+			NP:Update_ThreatText(frame)
 			local status = NP:UnitDetailedThreatSituation(frame)
 			if frame.ThreatStatus ~= status then
 				frame.ThreatStatus = status
@@ -1379,12 +1423,10 @@ function NP:TogleTestFrame(unitType)
 		local maxHealth = UnitHealthMax("player")
 		unitFrame.testUnitType = unitType
 		unitFrame.testMaxHealth = maxHealth
+		unitFrame.testAbsorb = maxHealth * 0.25
 		unitFrame.testHealth = random(1, maxHealth)
 		unitFrame.testClass = (unitType == "ENEMY_PLAYER" or unitType == "FRIENDLY_PLAYER") and E.myclass or nil
 		unitFrame.testRaidIcon = random(1, 8)
-
-		unitFrame.Buffs.forceShow = true
-		unitFrame.Debuffs.forceShow = true
 
 		if not ElvNP_Test:IsShown() then
 			ElvNP_Test:Show()
@@ -1440,6 +1482,7 @@ function NP:Initialize()
 	ElvNP_Test.isTestFrame = true
 	ElvNP_Test.ElvUIFrame.testUnitType = "ENEMY_NPC"
 	ElvNP_Test.ElvUIFrame.testMaxHealth = 100
+	ElvNP_Test.ElvUIFrame.testAbsorb = 25
 	ElvNP_Test.ElvUIFrame.testHealth = 70
 	NP.OnShow(ElvNP_Test, true, true)
 
@@ -1461,6 +1504,7 @@ function NP:Initialize()
 	NP:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 	NP:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 	NP:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
+	NP:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE")
 
 	NP:RegisterEvent("PLAYER_ENTERING_WORLD")
 	NP:RegisterEvent("PLAYER_REGEN_ENABLED")

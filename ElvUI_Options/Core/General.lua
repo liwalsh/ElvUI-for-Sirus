@@ -47,6 +47,7 @@ GenGen.textureGroup.inline = true
 GenGen.textureGroup.args.normTex = ACH:SharedMediaStatusbar(L["Primary Texture"], L["The texture that will be used mainly for statusbars."], 1, nil, nil, function(info, value) E.private.general[info[#info]] = value E:UpdateMedia() E:UpdateStatusBars() end)
 GenGen.textureGroup.args.glossTex = ACH:SharedMediaStatusbar(L["Secondary Texture"], L["This texture will get used on objects like chat windows and dropdown menus."], 2, nil, nil, function(info, value) E.private.general[info[#info]] = value E:UpdateMedia() E:UpdateFrameTemplates() end)
 GenGen.textureGroup.args.applyTextureToAll = ACH:Execute(L["Copy Primary Texture"], L["Replaces the StatusBar texture setting on Unitframes and Nameplates with the primary texture."], 3, function() E.db.unitframe.statusbar, E.db.nameplates.statusbar = E.private.general.normTex, E.private.general.normTex UF:Update_StatusBars() NP:ConfigureAll() end)
+GenGen.textureGroup.args.raidIconStyle = ACH:Select(L["Raid Icon Style"], L["Choose the style of the raid target icons. Every style previews all eight markers."], 4, E.GetRaidIconStyleValues, nil, nil, function(info) return E.db.general[info[#info]] end, function(info, value) E.db.general[info[#info]] = value E:UpdateRaidIcons() end)
 
 GenGen.colorsGroup = ACH:Group(L["Colors"], nil, 30, nil, function(info) local t, d = E.db.general[info[#info]], P.general[info[#info]] return t.r, t.g, t.b, t.a, d.r, d.g, d.b, d.a end, function(info, r, g, b, a) local setting = info[#info] local t = E.db.general[setting] t.r, t.g, t.b, t.a = r, g, b, a E:UpdateMedia() if setting == 'bordercolor' then E:UpdateBorderColors() elseif setting == 'backdropcolor' or setting == 'backdropfadecolor' then E:UpdateBackdropColors() end end)
 GenGen.colorsGroup.inline = true
@@ -103,7 +104,7 @@ Fonts.blizzard.args.noFontScale = ACH:Toggle(L["No Font Scale"], L["Dont scale b
 Fonts.blizzard.inline = true
 
 Fonts.combat = ACH:Group('', nil, 13, nil, function(info) return E.private.general[info[#info]] end, function(info, value) E.private.general[info[#info]] = value E.ShowPopup = true end)
-Fonts.combat.args.dmgfont = ACH:SharedMediaFont(L["Combat Font"], L["The font that combat text will use. |cffFF3333WARNING: This requires a game restart or re-log for this change to take effect.|r"], 1, nil, nil, nil, function() return E.eyefinity or E.ultrawide or not E.private.general.replaceCombatFont end)
+Fonts.combat.args.dmgfont = ACH:SharedMediaFont(L["Combat Font"], L["The font that combat text will use. |cffFF3333WARNING: This requires a game restart or re-log for this change to take effect.|r"], 1, nil, nil, nil, function() return not E.private.general.replaceCombatFont end)
 Fonts.combat.args.replaceCombatFont = ACH:Toggle(L["Enable"], nil, 2)
 Fonts.combat.args.replaceCombatFont.customWidth = 130
 Fonts.combat.args.replaceCombatText = ACH:Toggle(L["Replace Text on Me"], nil, 3, nil, nil, nil, nil, nil, function() return not E.private.general.replaceCombatFont end)
@@ -324,6 +325,11 @@ blizz.queueStatus.args.fontGroup.inline = true
 local function CharInfoGet(info) return E.db.general.characterInfo[info[#info]] end
 local function CharInfoSet(info, value)
 	E.db.general.characterInfo[info[#info]] = value
+	if info[#info] == "highlightBlackDiamonds" then
+		if SK.ColorItemCharacterBorder then SK:ColorItemCharacterBorder() end
+		if SK.ColorItemInspectBorder then SK:ColorItemInspectBorder() end
+		return
+	end
 	if SK.UpdateCharacterEquipmentSockets then
 		SK:UpdateCharacterEquipmentSockets()
 	end
@@ -338,18 +344,23 @@ blizz.characterInfo = ACH:Group(L["Character Information"], nil, 100, nil, CharI
 blizz.characterInfo.args.gemsAndEnchants = ACH:Group(L["Gems and Enchants"], nil, 1, nil, CharInfoGet, CharInfoSet)
 blizz.characterInfo.args.gemsAndEnchants.args.showGems = ACH:Toggle(L["Display Gems"], nil, 1)
 blizz.characterInfo.args.gemsAndEnchants.args.showEnchants = ACH:Toggle(L["Display Enchants"], nil, 2)
+blizz.characterInfo.args.gemsAndEnchants.args.highlightBlackDiamonds = ACH:Toggle(L["Highlight Black Diamonds"], L["Highlight items socketed with a black diamond without changing their quality borders."], 3)
 blizz.characterInfo.args.gemsAndEnchants.inline = true
 
 blizz.characterInfo.args.socketGroup = ACH:Group(L["Sockets"], nil, 2, nil, CharInfoGet, CharInfoSet, CharInfoDisabled("showGems"))
-blizz.characterInfo.args.socketGroup.args.socketPosition = ACH:Select(L["Position"], nil, 1, characterInfoPositions)
-blizz.characterInfo.args.socketGroup.args.socketXOffset = ACH:Range(L["X-Offset"], nil, 2, { min = -120, max = 120, step = 1 })
-blizz.characterInfo.args.socketGroup.args.socketYOffset = ACH:Range(L["Y-Offset"], nil, 3, { min = -120, max = 120, step = 1 })
+blizz.characterInfo.args.socketGroup.args.socketSize = ACH:Range(L["Size"], nil, 1, { min = 8, max = 40, step = 1 })
+blizz.characterInfo.args.socketGroup.args.socketPosition = ACH:Select(L["Position"], nil, 2, characterInfoPositions)
+blizz.characterInfo.args.socketGroup.args.socketXOffset = ACH:Range(L["X-Offset"], nil, 3, { min = -120, max = 120, step = 1 })
+blizz.characterInfo.args.socketGroup.args.socketYOffset = ACH:Range(L["Y-Offset"], nil, 4, { min = -120, max = 120, step = 1 })
 blizz.characterInfo.args.socketGroup.inline = true
 
 blizz.characterInfo.args.enchantGroup = ACH:Group(L["Enchant Text"], nil, 3, nil, CharInfoGet, CharInfoSet, CharInfoDisabled("showEnchants"))
 blizz.characterInfo.args.enchantGroup.args.enchantPosition = ACH:Select(L["Position"], nil, 1, characterInfoPositions)
 blizz.characterInfo.args.enchantGroup.args.enchantXOffset = ACH:Range(L["X-Offset"], nil, 2, { min = -120, max = 120, step = 1 })
 blizz.characterInfo.args.enchantGroup.args.enchantYOffset = ACH:Range(L["Y-Offset"], nil, 3, { min = -120, max = 120, step = 1 })
+blizz.characterInfo.args.enchantGroup.args.enchantFont = ACH:SharedMediaFont(L["Font"], nil, 4)
+blizz.characterInfo.args.enchantGroup.args.enchantFontSize = ACH:Range(L["Font Size"], nil, 5, C.Values.FontSize)
+blizz.characterInfo.args.enchantGroup.args.enchantFontOutline = ACH:FontFlags(L["Font Outline"], nil, 6)
 blizz.characterInfo.args.enchantGroup.inline = true
 
 blizz.characterInfo.args.itemLevelGroup = ACH:Group(L["Item Level"], nil, 4, nil, CharInfoGet, CharInfoSet)

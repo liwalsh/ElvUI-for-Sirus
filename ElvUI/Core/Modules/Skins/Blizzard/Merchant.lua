@@ -8,38 +8,6 @@ local hooksecurefunc = hooksecurefunc
 local GetBuybackItemInfo = GetBuybackItemInfo
 local GetItemInfo = GetItemInfo
 local GetMerchantNumItems = GetMerchantNumItems
-local GetMerchantItemMaxStack = GetMerchantItemMaxStack
-local GetMoney = GetMoney
-local IsAltKeyDown = IsAltKeyDown
-local floor = math.floor
-
-local function MerchantItemButton_AltStackBuy(button)
-	if not IsAltKeyDown() or _G.MerchantFrame.selectedTab ~= 1 then return end
-
-	local index = button:GetID()
-	local maxStack = GetMerchantItemMaxStack(index)
-	if not maxStack or maxStack < 1 then return end
-
-	if button.price and button.price > 0 then
-		local canAfford = floor(GetMoney() / button.price)
-		if canAfford < maxStack then
-			maxStack = canAfford
-		end
-	end
-
-	if maxStack < 1 then return end
-
-	button:SplitStack(maxStack)
-end
-
-local function MerchantItemButton_AltStackHint(tooltip)
-	if _G.MerchantFrame.selectedTab ~= 1 or not tooltip.merchantSlotIndex then return end
-
-	tooltip:AddLine(L["Alt-click to buy the full stack"], 1, 1, 1)
-end
-
-hooksecurefunc(_G.GameTooltip, "SetMerchantItem", MerchantItemButton_AltStackHint)
-
 local function LoadSkin()
 	if not E.private.skins.blizzard.enable or not E.private.skins.blizzard.merchant then return end
 
@@ -65,17 +33,6 @@ local function LoadSkin()
 	MerchantExtraCurrencyInset:StripTextures()
 
 	MerchantFrame:EnableMouseWheel(true)
-	MerchantFrame:SetScript("OnMouseWheel", function(_, value)
-		if value > 0 then
-			if MerchantPrevPageButton:IsShown() and MerchantPrevPageButton:IsEnabled() == 1 then
-				MerchantPrevPageButton_OnClick()
-			end
-		else
-			if MerchantNextPageButton:IsShown() and MerchantNextPageButton:IsEnabled() == 1 then
-				MerchantNextPageButton_OnClick()
-			end
-		end
-	end)
 
 	for i = 1, 12 do
 		local item = _G["MerchantItem"..i]
@@ -95,7 +52,6 @@ local function LoadSkin()
 		button:SetTemplate("Default", true)
 		button:Size(40)
 		button:Point("TOPLEFT", item, "TOPLEFT", 4, -4)
-		button:HookScript("OnClick", MerchantItemButton_AltStackBuy)
 
 		icon:SetTexCoords()
 		icon:SetInside()

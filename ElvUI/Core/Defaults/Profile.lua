@@ -57,6 +57,7 @@ P.general = {
 	raidUtility = {
 		showTooltip = true
 	},
+	raidIconStyle = 'blizzard',
 	fonts = {
 		cooldown = { enable = true, font = 'Expressway', size = 20, outline = 'SHADOWOUTLINE' },
 		errortext = { enable = true, font = 'Expressway', size = 18, outline = 'SHADOW' },
@@ -184,15 +185,38 @@ P.general = {
 		frameStrata = 'MEDIUM',
 		frameLevel = 20,
 	},
+	reminder = {
+		enable = false,
+		durations = true,
+		reverse = true,
+		position = "LEFT",
+		keepButtonSizeRatio = true,
+		height = 32,
+		font = "PT Sans Narrow",
+		fontSize = 12,
+		fontOutline = "OUTLINE",
+		pot = true,
+		food = true,
+		drubuff = true,
+		palcask = true,
+		inta = true,
+		palmp5 = true,
+		oil = true,
+	},
 	characterInfo = {
+		highlightBlackDiamonds = false,
 		showGems = true,
 		showEnchants = false,
+		socketSize = 16,
 		socketPosition = "default",
 		socketXOffset = 0,
 		socketYOffset = 0,
 		enchantPosition = "default",
 		enchantXOffset = 0,
 		enchantYOffset = 0,
+		enchantFont = "Expressway",
+		enchantFontSize = 11,
+		enchantFontOutline = "SHADOW",
 		showItemLevel = true,
 		itemLevelQualityColor = true,
 		itemLevelPosition = "BOTTOMLEFT",
@@ -1119,6 +1143,26 @@ P.nameplates = {
 }
 
 for _, unitContent in pairs(P.nameplates.units) do
+	for _, aura in ipairs({ "buffs", "debuffs" }) do
+		if unitContent[aura] then
+			unitContent[aura].useSirusPosition = true
+			unitContent[aura].useSirusSize = true
+		end
+	end
+	unitContent.customTexts = {}
+	unitContent.threatText = {
+		enable = false, position = "BOTTOMRIGHT", justifyH = "RIGHT", xOffset = 0, yOffset = -16,
+		font = "PT Sans Narrow", fontSize = 12, fontOutline = "OUTLINE", layer = "OVERLAY"
+	}
+	if unitContent.health then
+		unitContent.health.absorb = {
+			enable = true, showText = false,
+			position = "RIGHT", xOffset = -4, yOffset = 0,
+			font = unitContent.health.text.font,
+			fontSize = unitContent.health.text.fontSize,
+			fontOutline = unitContent.health.text.fontOutline
+		}
+	end
 	if unitContent.buffs then
 		unitContent.buffs.attachTo = "FRAME"
 		unitContent.buffs.anchorPoint = "LEFT"
@@ -1754,6 +1798,7 @@ P.unitframe = {
 				height = 10,
 				autoHide = false,
 				additionalPowerText = true,
+				showRuneTimer = false,
 				detachFromFrame = false,
 				detachedWidth = 250,
 				parent = "FRAME",
@@ -4483,6 +4528,7 @@ P.actionbar = {
 		widthMult = 1,
 		frameStrata = 'LOW',
 		frameLevel = 1,
+		hiddenButtons = {},
 	},
 	vehicleExitButton = {
 		enable = true,

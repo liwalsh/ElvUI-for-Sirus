@@ -29,7 +29,7 @@ local function SkinMiniGameReward(frame)
 		frame.backdrop:SetOutside(icon)
 		icon:SetParent(frame.backdrop)
 
-		frame.Icon = icon
+		if not frame.Icon then frame.Icon = icon end
 
 		if frame.Name then
 			frame.Name:ClearAllPoints()
@@ -42,7 +42,7 @@ local function SkinMiniGameReward(frame)
 			count:SetDrawLayer("OVERLAY")
 			count:ClearAllPoints()
 			count:Point("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 2, 2)
-			frame.Count = count
+			if not frame.Count then frame.Count = count end
 		end
 
 		frame.isSkinned = true
@@ -762,9 +762,6 @@ local function LoadSkin()
 		b.Icon:Size(45)
 		b.Icon:ClearAllPoints()
 		b.Icon:Point("LEFT", 10, 0)
-		b.Icon:CreateBackdrop()
-		b.Icon:SetParent(b.Icon.backdrop)
-		b.Icon.backdrop:SetFrameLevel(b:GetFrameLevel() + 2)
 
 		local iconAtlas = b.Icon._atlasName or b:GetAttribute("iconAtlas")
 		if iconAtlas then
@@ -1154,9 +1151,14 @@ local function LoadSkin()
 	MiniGamesParentFrame.BottomInset.Background:Kill()
 	S:HandleButton(MiniGamesParentFrameFindGroupButton, true)
 
-	if _G.MiniGamesParentFrameBottomInsetScrollFrame then
-		_G.MiniGamesParentFrameBottomInsetScrollFrame:StripTextures()
+	local miniScroll = _G.MiniGamesParentFrameBottomInsetScrollFrame
+	if miniScroll then
+		miniScroll:StripTextures()
 		S:HandleSirusScrollBar(_G.MiniGamesParentFrameBottomInsetScrollFrameScrollBar)
+
+		miniScroll:ClearAllPoints()
+		miniScroll:Point("TOPLEFT", MiniGamesParentFrame.BottomInset, "TOPLEFT", 3, 20)
+		miniScroll:SetHeight(miniScroll:GetHeight() + 20)
 	end
 
 	if _G.LFDParentFrameArt then _G.LFDParentFrameArt:StripTextures() end

@@ -8,7 +8,6 @@ local InCombatLockdown = InCombatLockdown
 local captureBarHolder = CreateFrame('Frame', 'ElvUI_CaptureBarHolder', E.UIParent)
 local pvpHolder = CreateFrame('Frame', 'ElvUI_PvPHolder', E.UIParent)
 
-local numAlwaysUpFrames = 0
 local numExtendedUIFrames = 0
 
 local function CanChangeProtectedState(frame)
@@ -45,6 +44,9 @@ local function alwaysUpFrameUpdate(id)
 	local dynamicIconButton = _G['AlwaysUpFrame'..id..'DynamicIconButton']
 
 	if text then
+		text:SetWidth(0)
+		text:SetJustifyH('CENTER')
+		text:SetWordWrap(false)
 		text:ClearAllPoints()
 		text:Point('CENTER', frame, 'CENTER', 0, 0)
 	end
@@ -59,9 +61,11 @@ local function alwaysUpFrameUpdate(id)
 		dynamicIconButton:Point('LEFT', text, 'RIGHT', 5, 0)
 	end
 
+	frame:ClearAllPoints()
 	if id == 1 then
-		frame:ClearAllPoints()
 		frame:Point('CENTER', pvpHolder, 'CENTER', 0, 5)
+	else
+		frame:Point('TOP', _G['AlwaysUpFrame'..(id - 1)], 'BOTTOM', 0, 0)
 	end
 
 	return true
@@ -70,11 +74,8 @@ end
 local function alwaysUpFramesUpdate()
 	local numFrames = _G.NUM_ALWAYS_UP_UI_FRAMES or 0
 
-	if numAlwaysUpFrames >= numFrames then return end
-
-	for id = numAlwaysUpFrames + 1, numFrames do
+	for id = 1, numFrames do
 		if not alwaysUpFrameUpdate(id) then return end
-		numAlwaysUpFrames = id
 	end
 end
 
@@ -94,9 +95,7 @@ function BL:PositionAlwaysUpFrame()
 	pvpHolder:Point('TOP', E.UIParent, 'TOP', 0, -4)
 
 	hooksecurefunc('WorldStateAlwaysUpFrame_Update', function()
-		if numAlwaysUpFrames < (_G.NUM_ALWAYS_UP_UI_FRAMES or 0) then
-			C_Timer:After(0, alwaysUpFramesUpdate)
-		end
+		alwaysUpFramesUpdate()
 
 		if numExtendedUIFrames < (_G.NUM_EXTENDED_UI_FRAMES or 0) then
 			C_Timer:After(0, captureBarsUpdate)
@@ -104,6 +103,9 @@ function BL:PositionAlwaysUpFrame()
 	end)
 
 	alwaysUpFramesUpdate()
+	local regen = CreateFrame('Frame')
+	regen:RegisterEvent('PLAYER_REGEN_ENABLED')
+	regen:SetScript('OnEvent', alwaysUpFramesUpdate)
 
 	E:CreateMover(pvpHolder, 'PvPMover', L["PvP"], nil, nil, nil, 'ALL')
 end
@@ -112,7 +114,8 @@ local function reanchorManagedFrames()
 	if InCombatLockdown() then return end
 
 	captureBarUpdate(1)
-	alwaysUpFrameUpdate(1)
+	alwaysUpFramesUpdate()
+	captureBarsUpdate()
 end
 
 function BL:PositionCaptureBar()
